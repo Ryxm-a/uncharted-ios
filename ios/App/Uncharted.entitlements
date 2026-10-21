@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Dynamic code generation is required: FEX translates PS4 x86-64 code to ARM64
+	     at runtime. On AltStore/SideStore this entitlement is honored when the user
+	     enables AltJIT; TrollStore grants it always; TestFlight cannot. -->
+	<key>com.apple.security.cs.allow-jit</key><true/>
+	<key>com.apple.security.cs.allow-unsigned-executable-memory</key><true/>
+	<key>com.apple.security.cs.disable-executable-page-protection</key><true/>
+	<!-- Extended memory so the guest never runs off its VM budget. -->
+	<key>com.apple.developer.kernel.extended-virtual-addressing</key><true/>
+	<key>com.apple.developer.kernel.increased-memory-limit</key><true/>
+</dict>
+</plist>

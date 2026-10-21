@@ -1,0 +1,137 @@
+name: ios-ipa
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['docs/**', '**.md']
+  workflow_dispatch:
+    inputs:
+      full_engine:
+        description: 'Full engine (upstream + FEX). Leave off until Phase-1 bring-up is green.'
+        type: boolean
+        required: false
+        default: false
+      with_cutscenes:
+        description: 'Build FFmpeg (cutscene decoder) — full mode only'
+        type: boolean
+        required: false
+        default: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  CONFIG: Release
+  MOLTENVK_DIR: moltenvk
+
+jobs:
+  build:
+    name: IPA (iOS, arm64)
+    runs-on: macos-14
+    timeout-minutes: 110
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false      # explicit clones below keep the pipeline explicit
+
+      - name: Compute build mode
+        run: |
+          if [ "${{ inputs.full_engine }}" = "true" ]; then
+            echo "ENGINE_MODE=full" >> "$GITHUB_ENV"
+            echo "CUTSCENES=${{ inputs.with_cutscenes }}" >> "$GITHUB_ENV"
+          else
+            echo "ENGINE_MODE=lite" >> "$GITHUB_ENV"
+            echo "CUTSCENES=0" >> "$GITHUB_ENV"
+          fi
+
+      - name: Clone upstream bbport sources (+ their submodules)
+        run: |
+          git clone --depth 1 https://github.com/Supermedo/uncharted_pc upstream
+          ( cd upstream && git submodule update --init --recursive --depth 1 || true )
+
+      - name: Clone FEX (CPU engine)
+        if: env.ENGINE_MODE == 'full'
+        run: |
+          mkdir -p third_party
+          git clone --depth 1 https://github.com/FEX-Emu/FEX third_party/fex
+
+      - name: Install tooling
+        run: brew install xcodegen ldid ninja
+
+      - name: Stage MoltenVK
+        run: ios/scripts/fetch_moltenvk.sh "${{ runner.temp }}/moltenvk"
+
+      - name: Fetch engine deps (full mode)
+        if: env.ENGINE_MODE == 'full'
+        run: ios/scripts/fetch_deps.sh "${{ runner.temp }}/deps"
+
+      - name: Build SDL3 (iOS arm64 static)
+        if: env.ENGINE_MODE == 'full'
+        run: ios/scripts/build_SDL3_ios.sh "${{ runner.temp }}/sdl"
+
+      - name: Build FFmpeg (minimal cutscene codec set)
+        if: env.ENGINE_MODE == 'full' && env.CUTSCENES == '1'
+        run: ios/scripts/build_ffmpeg_ios.sh "${{ runner.temp }}/ffmpeg"
+
+      - name: Build LibAtrac9 (iOS arm64 static)
+        if: env.ENGINE_MODE == 'full'
+        run: ios/scripts/build_libatrac9_ios.sh "${{ runner.temp }}/atrac9"
+
+      - name: Build engine core (libbbios.a — ${{ env.ENGINE_MODE }})
+        run: |
+          ios/scripts/build_engine.sh "$ENGINE_MODE" \
+            "${{ runner.temp }}/deps" \
+            "${{ runner.temp }}/sdl" \
+            "${{ runner.temp }}/ffmpeg" \
+            "${{ runner.temp }}/atrac9"
+
+      - name: Generate Xcode project
+        run: |
+          cd ios/App
+          xcodegen generate
+
+      - name: Build app (xcodebuild, ${{ env.ENGINE_MODE }})
+        run: |
+          cd ios/App
+          EXTRA=()
+          if [ "$ENGINE_MODE" = "full" ]; then
+            LIBS="$(inherited) -lbbios -lSDL3 -latrac9"
+            if [ "$CUTSCENES" = "1" ]; then
+              LIBS="$LIBS -lavcodec -lavformat -lavutil -lswscale -lswresample"
+            fi
+            LIBS="$LIBS -lglslang -lSPIRV -lsirit -lfmt"
+            EXTRA+=(OTHER_LDFLAGS="$LIBS" "LIBRARY_SEARCH_PATHS=$(inherited) ${{ runner.temp }} $GITHUB_WORKSPACE/artifacts/engine")
+          fi
+          xcodebuild -project Uncharted.xcodeproj \
+            -scheme Uncharted \
+            -configuration "$CONFIG" \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
+            CODE_SIGNING_ALLOWED=NO \
+            LIBRARY_SEARCH_PATHS="$GITHUB_WORKSPACE/artifacts/engine $(inherited)" \
+            "${EXTRA[@]}" \
+            -derivedDataPath "${{ runner.temp }}/dd" build
+
+      - name: Assemble + sign IPA
+        run: ios/scripts/make_ipa.sh "${{ runner.temp }}/dd"
+
+      - name: Game-file gate
+        run: ios/scripts/check_no_game_files.sh
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: uncharted-ios-ipa
+          path: artifacts/*.ipa
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload PC-side prep tool
+        uses: actions/upload-artifact@v4
+        with:
+          name: prepare-for-ios-tools
+          path: ios/tools/
+          if-no-files-found: error

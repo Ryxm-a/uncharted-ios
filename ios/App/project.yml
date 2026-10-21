@@ -1,0 +1,36 @@
+name: Uncharted
+options:
+  bundleIdPrefix: io.github.bbport
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    ARCHS: arm64
+    ONLY_ACTIVE_ARCH: "YES"
+    SWIFT_VERSION: "5.9"
+    GENERATE_INFOPLIST_FILE: "NO"
+    INFOPLIST_FILE: "$(SRCROOT)/Info.plist"
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: ""
+    DEVELOPMENT_TEAM: ""
+
+targets:
+  Uncharted:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      - path: Bridging
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.bbport.uncharted
+        PRODUCT_NAME: Uncharted
+        SWIFT_OBJC_BRIDGING_HEADER: "$(SRCROOT)/Bridging/BBBridging.h"
+        CODE_SIGN_ENTITLEMENTS: "$(SRCROOT)/Uncharted.entitlements"
+        # Engine link (populated by build_engine.sh in full-engine mode; harmless otherwise):
+        LIBRARY_SEARCH_PATHS: "$(inherited) $(SRCROOT)/../../artifacts/engine"
+        OTHER_LDFLAGS: "$(inherited) -lbbios"

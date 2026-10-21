@@ -1,0 +1,9 @@
+# Submodules on purpose minimal: CI clones every dependency explicitly (see
+# .github/workflows/ios-ipa.yml) so first builds only require a plain checkout —
+# no `git submodule update --init` dance for contributors.
+# If you prefer git-managed submodules, `git submodule add` these refs:
+#   upstream/            -> https://github.com/Supermedo/uncharted_pc /main
+#   third_party/fex      -> https://github.com/FEX-Emu/FEX            /main
+#   third_party/SDL      -> https://github.com/libsdl-org/SDL         /release-3.2.x
+#   third_party/LibAtrac9-> https://github.com/Thealexbarney/LibAtrac9 /master
+# (MoltenVK is fetched as a pinned prebuilt release tarball by fetch_moltenvk.sh.)
